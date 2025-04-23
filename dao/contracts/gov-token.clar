@@ -1,4 +1,4 @@
-;; Nexus Harmony DAO - Stage 2: Enhanced Governance
+;; Simplified DAO Governance Protocol
 
 ;; Constants
 (define-constant ERR-NOT-GOVERNOR (err u1))
@@ -9,22 +9,23 @@
 (define-constant ERR-INSUFFICIENT-TOKENS (err u6))
 (define-constant ERR-PROPOSAL-EXISTS (err u7))
 (define-constant ERR-ALREADY-VOTED (err u8))
-(define-constant MAX-PROPOSAL-ID u500) ;; Maximum allowed proposal ID
+(define-constant ERR-NOT-AUTHORIZED (err u9))
+(define-constant MAX-PROPOSAL-ID u1000) ;; Maximum allowed proposal ID
 
 ;; Data Variables
 (define-data-var dao-governor principal tx-sender)
 (define-data-var dao-active bool false)
 (define-data-var governance-cycle uint u0)
-(define-data-var token-threshold uint u100000) ;; 100k token minimum
+(define-data-var token-threshold uint u1000000) ;; 1 governance token minimum
 (define-data-var treasury-balance uint u0)
-(define-data-var quorum-percentage uint u25) ;; 25% quorum required for proposal to pass
+(define-data-var quorum-percentage uint u33) ;; 33% quorum required for proposal to pass
 
 ;; Proposal Structure
 (define-map proposals
     uint
     {
-        title: (string-utf8 100),
-        description: (string-utf8 400),
+        title: (string-utf8 128),
+        description: (string-utf8 512),
         proposal-hash: (buff 32),    ;; SHA256 hash of the detailed proposal
         fund-request: uint,          ;; Amount of tokens requested for implementation
         votes-for: uint,
@@ -40,7 +41,7 @@
     principal
     {
         token-balance: uint,
-        proposals-created: (list 20 uint),
+        proposals-created: (list 30 uint),
         voting-power: uint           ;; Can be different from token balance (delegation)
     }
 )
@@ -69,13 +70,13 @@
 
 (define-public (submit-proposal
     (proposal-id uint)
-    (title (string-utf8 100))
-    (description (string-utf8 400))
+    (title (string-utf8 128))
+    (description (string-utf8 512))
     (proposal-hash (buff 32))
     (fund-request uint))
     (let (
         (member-profile (unwrap! (map-get? member-profiles tx-sender) ERR-INSUFFICIENT-TOKENS))
-        (total-token-supply u5000000) ;; Example: 5M total tokens
+        (total-token-supply u10000000) ;; Example: 10M total tokens
         )
         
         ;; Check DAO status
@@ -112,7 +113,7 @@
         (map-set member-profiles tx-sender
             (merge member-profile {
                 proposals-created: (unwrap! (as-max-len? 
-                    (append (get proposals-created member-profile) proposal-id) u20)
+                    (append (get proposals-created member-profile) proposal-id) u30)
                     ERR-INVALID-PARAMETER)
             }))
         
@@ -188,7 +189,7 @@
         (asserts! (var-get dao-active) ERR-DAO-INACTIVE)
         
         ;; Only governor can finalize proposals
-        (asserts! (is-governor) ERR-NOT-GOVERNOR)
+        (asserts! (is-governor) ERR-NOT-AUTHORIZED)
         
         ;; Check proposal hasn't been executed
         (asserts! (not (get executed proposal)) ERR-PROPOSAL-FINALIZED)
@@ -262,4 +263,10 @@
         (asserts! (is-governor) ERR-NOT-GOVERNOR)
         (asserts! (var-get dao-active) ERR-DAO-INACTIVE)
         (var-set governance-cycle (+ (var-get governance-cycle) u1))
+        (ok true)))
+
+(define-public (transfer-governor-role (new-governor principal))
+    (begin
+        (asserts! (is-governor) ERR-NOT-GOVERNOR)
+        (var-set dao-governor new-governor)
         (ok true)))
